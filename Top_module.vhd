@@ -62,6 +62,7 @@ architecture Behavioral of top_hog_axi is
      signal s_fin_cel_edge :  STD_LOGIC;
      signal s_hready : STD_LOGIC := '0';
      signal s_vready : STD_LOGIC := '0';
+     signal s_lock_ultimo_bloque : STD_LOGIC := '0';
      signal s_celda : STD_LOGIC_vector(3 downto 0);     
      signal s_binarized_histogram : STD_LOGIC_vector(35 downto 0);     
      signal s_contador : integer range 0 to 9;     
@@ -213,12 +214,13 @@ U_sobel: edge_detection
         );
      
 --     Proceso para separacion de bloques
-blocos: process(clk,reset,s_celda)
+blocos: process(clk,reset,s_celda,s_ready_histo)
 begin
 if rising_edge(clk) then
     if reset='1' then
     s_contador<=0;
-    s_start_bina<='0'; 
+    s_start_bina<='0';
+    s_lock_ultimo_bloque<='0'; 
     
     else
         s_start_bina<='0';
@@ -266,32 +268,35 @@ if rising_edge(clk) then
                 s_hist_bloque(3)<=fifo_histograms(11);
 --                s_start_bina<='1';
              end if;
-             if s_contador=8 then
+             if s_contador=12 then
                 s_hist_bloque(0)<=fifo_histograms(8);
                 s_hist_bloque(1)<=fifo_histograms(9);
                 s_hist_bloque(2)<=fifo_histograms(12);
                 s_hist_bloque(3)<=fifo_histograms(13);
 --                s_start_bina<='1';
              end if;
-             if s_contador=9 then
+             if s_contador=13 then
                 s_hist_bloque(0)<=fifo_histograms(9);
                 s_hist_bloque(1)<=fifo_histograms(10);
                 s_hist_bloque(2)<=fifo_histograms(13);
                 s_hist_bloque(3)<=fifo_histograms(14);
 --                s_start_bina<='1';
-             end if;
-             if s_contador=10 then
-                s_hist_bloque(0)<=fifo_histograms(10);
-                s_hist_bloque(1)<=fifo_histograms(11);
-                s_hist_bloque(2)<=fifo_histograms(14);
-                s_hist_bloque(3)<=fifo_histograms(15);
---                s_start_bina<='1';
-             end if;
-             if s_contador>1 then
+             end if;--           
+             if s_contador>1 and s_contador<14 then
                 s_start_bina<='1';
              end if;             
-        end if;    
+        end if;           
     end if;
+    if s_ready_histo='1' and s_contador=20 then
+                if s_lock_ultimo_bloque='1' then
+                    s_hist_bloque(0)<=fifo_histograms(10);
+                    s_hist_bloque(1)<=fifo_histograms(11);
+                    s_hist_bloque(2)<=fifo_histograms(14);
+                    s_hist_bloque(3)<=fifo_histograms(15);
+                    s_start_bina<='1';
+                    end if;
+           s_lock_ultimo_bloque<='1';
+        end if;
 end if;    
 end process;
      

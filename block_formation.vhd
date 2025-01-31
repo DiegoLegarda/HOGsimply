@@ -42,52 +42,74 @@ architecture Behavioral of hog_block_histogram is
     -- Señales internas
     signal binarized_block : STD_LOGIC_VECTOR(BLOCK_SIZE*NUM_BINS-1 downto 0) := (others => '0');
     signal valid_block      : STD_LOGIC := '0';
-    signal s_average      : unsigned(BIN_WIDTH-1 downto 0);
---    type Histograma_bloque is array (0 to 3) of Celda;
+    signal s_average        : unsigned(BIN_WIDTH-1 downto 0);
+    signal processing       : STD_LOGIC := '0';  -- Señal para indicar que se está procesando el bloque
+    signal step_counter     : integer range 0 to 3 := 0; -- Contador de pasos para sincronizar procesos
+
 begin
 
     process(clk)
         variable bin_sum : unsigned(BIN_WIDTH+4 downto 0) := (others => '0'); -- Suma de todos los bins
         variable average : unsigned(BIN_WIDTH-1 downto 0);                    -- Promedio de los bins
-        variable bin_idx, cell_idx : integer;    
-        variable bin_value : unsigned(14 downto 0);                              -- Índices para celdas y bins
+        variable bin_idx, cell_idx : integer;                                  
+        variable bin_value : unsigned(14 downto 0);                           
     begin
         if rising_edge(clk) then
             if reset = '1' then
                 -- Reset de señales internas
                 binarized_block <= (others => '0');
                 valid_block <= '0';
-            elsif block_valid_in = '1' then
-                -- Inicializar acumulador de suma
-                bin_sum := (others => '0');
+                processing <= '0';
+                step_counter <= 0;
+            elsif block_valid_in = '1' and processing = '0' then
+                -- Iniciar procesamiento del bloque
+                processing <= '1';
+                step_counter <= 0; -- Reiniciar contador de pasos
+            end if;
 
-                  -- Paso 1: Sumar todos los bins del bloque
-                for cell_idx in 0 to BLOCK_SIZE-1 loop
-                    for bin_idx in 0 to NUM_BINS-1 loop
-                        -- Extraer el valor del bin actual
-                        bin_value := unsigned(block_histogram_in(cell_idx)(bin_idx));
+            if processing = '1' then
+                case step_counter is
+                    when 0 =>
+                        -- Paso 1: Inicializar acumulador de suma
+                        bin_sum := (others => '0');
+                        step_counter <= 1;
 
-                        -- Acumular el valor con redimensionamiento explícito
-                        bin_sum := bin_sum + resize(bin_value, BIN_WIDTH+4);
-                    end loop;
-                end loop;
+                    when 1 =>
+                        -- Paso 2: Sumar todos los bins del bloque
+                        for cell_idx in 0 to BLOCK_SIZE-1 loop
+                            for bin_idx in 0 to NUM_BINS-1 loop
+                                bin_value := unsigned(block_histogram_in(cell_idx)(bin_idx));
+                                bin_sum := bin_sum + resize(bin_value, BIN_WIDTH+4);
+                            end loop;
+                        end loop;
+                        step_counter <= 2;
 
-                -- Paso 2: Calcular promedio dividiendo entre el total de bins (BLOCK_SIZE * NUM_BINS)
-                average := resize(bin_sum srl 5, BIN_WIDTH); -- srl 5 equivale a dividir por 32 (4 celdas * 9 bins)
-                s_average<=average;
-                -- Paso 3: Binarizar los bins comparándolos con el promedio
-                for cell_idx in 0 to BLOCK_SIZE-1 loop
-                    for bin_idx in 0 to NUM_BINS-1 loop
-                        if unsigned(block_histogram_in(cell_idx)(bin_idx)) >= average then
-                            binarized_block(cell_idx*NUM_BINS + bin_idx) <= '1';
-                        else
-                            binarized_block(cell_idx*NUM_BINS + bin_idx) <= '0';
-                        end if;
-                    end loop;
-                end loop;
+                    when 2 =>
+                        -- Paso 3: Calcular promedio dividiendo entre el total de bins (BLOCK_SIZE * NUM_BINS)
+                        average := resize(bin_sum srl 5, BIN_WIDTH); -- srl 5 equivale a dividir por 32 (4 celdas * 9 bins)
+                        s_average <= average;
+                        step_counter <= 3;
 
-                -- Indicar que el bloque binarizado está listo
-                valid_block <= '1';
+                    when 3 =>
+                        -- Paso 4: Binarizar los bins comparándolos con el promedio
+                        for cell_idx in 0 to BLOCK_SIZE-1 loop
+                            for bin_idx in 0 to NUM_BINS-1 loop
+                                if unsigned(block_histogram_in(cell_idx)(bin_idx)) >= average then
+                                    binarized_block(cell_idx*NUM_BINS + bin_idx) <= '1';
+                                else
+                                    binarized_block(cell_idx*NUM_BINS + bin_idx) <= '0';
+                                end if;
+                            end loop;
+                        end loop;
+
+                        -- Marcar bloque como válido después de completar el procesamiento
+                        valid_block <= '1';
+                        processing <= '0'; -- Finalizar procesamiento
+                        step_counter <= 0;
+
+                    when others =>
+                        step_counter <= 0;
+                end case;
             else
                 -- Desactivar la señal de validez si no hay bloque válido de entrada
                 valid_block <= '0';
@@ -100,4 +122,5 @@ begin
     block_valid <= valid_block;
 
 end Behavioral;
+
 

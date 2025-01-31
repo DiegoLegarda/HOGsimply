@@ -77,6 +77,7 @@ architecture Behavioral of hog_cell_histogram_with_fifo is
     signal cell_y_counter   : integer range 0 to CELLS_PER_ROW-1 := 0; -- Contador de celdas en y
     signal cell_idx         : integer range 0 to (CELLS_PER_ROW * CELLS_PER_ROW) - 1 := 0; -- Ã?ndice de celda
     signal prev_cell_idx         : integer range 0 to (CELLS_PER_ROW * CELLS_PER_ROW) - 1 := 0; -- Ã?ndice de celda
+    signal prev_cell_idx2         : integer range 0 to (CELLS_PER_ROW * CELLS_PER_ROW) - 1 := 0; -- Ã?ndice de celda
     signal cell_histogram_ready : STD_LOGIC := '0';
     signal grad_x : signed(9 downto 0);
     signal grad_y : signed(9 downto 0);
@@ -360,9 +361,10 @@ if rising_edge(clk) then
             prev_cell_idx<=0;
             prev_cell_x_counter<=0;            
         else
-            lock<='0';        
+            lock<='0';
+            histogram_complete <= '0';        
             if grad_valid_in = '1' then
-                histogram_complete <= '0';                
+                                
                 -- Incrementar x_counter
                 if x_counter = IMG_WIDTH - 1 then
                     x_counter <= 0;
@@ -408,12 +410,21 @@ if rising_edge(clk) then
                end if; 
                 end if;
                 if(cell_idx/=prev_cell_idx) then
-                histogram_complete <= '1';
+--                histogram_complete <= '1';
                      contador<=0;           
-                end if;
-                 
+                end if;                 
                 prev_cell_idx<=cell_idx;
-            end if;                                                               
+            end if;
+                
+            if y_counter=31 and ( cell_idx=14 or cell_idx=15) then
+                if(cell_idx/=prev_cell_idx2) then
+                histogram_complete <= '1';
+                end if;
+                if cell_idx=15 and bin_complete='1' then
+                    histogram_complete <= '1';
+                end if;                
+            end if;
+            prev_cell_idx2<=cell_idx;                                                               
             prev_cell_x_counter <= cell_x_counter;             
         end if;
 end if;
@@ -524,7 +535,7 @@ end process;
 
 magnitud<=s_mag;
 fifo_histograms<=Histograma_fifo;
-fifo_valid <= lock;
+fifo_valid <= lock or histogram_complete;
 celda<=std_logic_vector(to_unsigned(cell_idx,4));
 end Behavioral;
 
